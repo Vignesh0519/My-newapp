@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_DEFAULT_REGION = 'ap-southeast-1'
+        TF_WORKSPACE = 'my-terraform-workspace'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    git 'https://github.com/Vignesh0519/My-newapp.git'
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                script {
+                    sh 'terraform init'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                script {
+                    sh 'terraform plan -var-file=variables.tfvars'
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                script {
+                    sh 'terraform apply -auto-approve -var-file=variables.tfvars'
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                script {
+                    sh 'kubectl apply -f deployment.yaml'
+                }
+            }
+        }
+
+        stage('Monitoring & Service Mesh') {
+            steps {
+                script {
+                    / Deploy Prometheus
+            sh 'kubectl apply -f Monitoring/prometheus.yaml'
+
+            // Deploy Grafana
+            sh 'kubectl apply -f Monitoring/grafana.yaml'
+
+            // Wait for deployments to be ready
+            sh 'kubectl rollout status deployment/prometheus-deployment'
+            sh 'kubectl rollout status deployment/grafana-deployment'
+
+            // Output the Prometheus and Grafana URLs
+            def prometheusUrl = sh(script: 'kubectl get svc prometheus-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"', returnStdout: true).trim()
+            def grafanaUrl = sh(script: 'kubectl get svc grafana-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"', returnStdout: true).trim()
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                // Cleanup or additional steps after the pipeline
+                sh 'terraform destroy -auto-approve -var-file=variables.tfvars'
+            }
+        }
+    }
+}
